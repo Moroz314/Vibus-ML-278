@@ -1,5 +1,8 @@
 import websocket
+<<<<<<< HEAD
 from websocket import WebSocketApp
+=======
+>>>>>>> a6a076d2c779859ce9b613cfd473fd662a56b957
 import keyboard
 
 
@@ -68,7 +71,11 @@ def on_message(ws, message):
     KeyListener(ws)
 
 
+<<<<<<< HEAD
 ws = websocket.WebSocketApp("ws://192.168.0.108:8000/ws",
+=======
+ws = websocket.WebSocketApp("ws://127.0.0.1:8000/ws",
+>>>>>>> a6a076d2c779859ce9b613cfd473fd662a56b957
                             on_open=on_open,
                             on_message=on_message,
                             )

