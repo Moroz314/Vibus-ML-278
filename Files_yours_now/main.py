@@ -1,162 +1,130 @@
 import os
-import aiohttp
-import asyncio
-
-FILE = "http://192.168.0.108:5050/file"
-DISK = "http://192.168.0.108:5050/disk"
-DIRS = "http://192.168.0.108:5050/dirs"
-ZAPROS = "http://192.168.0.108:5050/zapr"
+import json
+from websocket import WebSocketApp
 
 
-async def send_post_request(data, when):
-    async with aiohttp.ClientSession() as session:
+
+class WebSocketHandler:
+    def __init__(self, url):
+        self.ws = WebSocketApp(
+            url,
+            on_open=self.on_open,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close,
+        )
+        self.current_path = None
+        self.history = []
+
+    def on_open(self, ws):
+        print("✅ Соединение установлено. Ожидание команды...")
+
+    def on_message(self, ws, message):
+        print(f"📩 Получено сообщение: {message}")
         try:
-            url = {"file": FILE, "disk": DISK, "dirs": DIRS}.get(when)
-            if url:
-                async with session.post(url, json=data) as response:
-                    if response.status == 200:
-                        print(f"✅ Успешно отправлено: {await response.json()}")
-                    else:
-                        print(f"⚠ Ошибка отправки: {response.status}, {await response.text()}")
-        except Exception as e:
-            print(f"⚠ Ошибка при подключении: {e}")
-
-
-async def get_command():
-    while True:
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(ZAPROS) as response:
-                    if response.status == 200:
-                        command = await response.text()
-                        if command:  # Проверяем, что команда не пустая
-                            return command.strip()
-                        else:
-                            print("⚠ Пустая команда. Повтор запроса...")
-                    else:
-                        print(f"⚠ Ошибка получения команды: {response.status}, {await response.text()}")
-            except Exception as e:
-                print(f"⚠ Ошибка при подключении: {e}")
-        
-        # Небольшая задержка перед повторной попыткой
-        await asyncio.sleep(1)
-
-
-async def list_directory(path):
-    try:
-        contents = os.listdir(path)
-        print(f"\n📂 Текущая папка: {path}")
-        print("Содержимое:")
-        json_dirs = []
-        for index, item in enumerate(contents):
-            item_path = os.path.join(path, item)
-            if os.path.isdir(item_path):
-                json_dirs.append({"index": index, "type": "folder", "name": item})
-                print(f"  [{index}] 📁 {item}/")
+            command = json.loads(message)
+            action = command.get("command")
+            if action == "list_drives":
+                self.list_drives(ws)
+            elif action == "list_directory":
+                path = command.get("path", self.current_path or "/")
+                self.list_directory(ws, path)
+            elif action == "navigate":
+                path = command.get("path")
+                print(path)
+                self.navigate(ws, path)
+            elif action == "exit":
+                print("👋 Завершение программы по команде.")
+                ws.close()
             else:
-                json_dirs.append({"index": index, "type": "file", "name": item})
-                print(f"  [{index}] 📄 {item}")
-        await send_post_request(json_dirs, 'dirs')  # Асинхронный вызов
-        return contents
-    except PermissionError:
-        print("⛔ Нет доступа к этой папке!")
-        return []
-    except FileNotFoundError:
-        print("❌ Папка не найдена!")
-        return []
+                print("⚠ Неизвестная команда.")
+        except json.JSONDecodeError:
+            print("⚠ Ошибка: Неверный формат сообщения.")
 
+    def on_error(self, ws, error):
+        print(f"⚠ Ошибка WebSocket: {error}")
 
-async def navigate(start_path):
-    current_path = start_path
-    history = []
+    def on_close(self, ws, close_status_code, close_msg):
+        print("❌ Соединение закрыто.")
 
-    while True:
-        contents = await list_directory(current_path)
-        print("\nДоступные команды:")
-        print("  [номер] - открыть папку или файл")
-        print("  [..] - вернуться назад")
-        print("  [exit] - выйти из программы")
-        comm = '""'
-        while comm == '""':
-            comm = await get_command()
-        print(comm)
+    def list_drives(self, ws):
+        """Отправляет список доступных дисков"""
+        import platform
+        if platform.system() == "Windows":
+            import string
+            from ctypes import windll
         
-        if comm:
-            choice = comm.strip()
+            bitmask = windll.kernel32.GetLogicalDrives()
+        
+            if bitmask == 0:
+                print("⚠ Ошибка: функция GetLogicalDrives() вернула 0.")
+                return []
+        
+            drives = []
+            for letter in string.ascii_uppercase:
+                if bitmask & 1: 
+                    drives.append(f"{letter}:\\")
+                bitmask >>= 1  
+            
         else:
-            print("⚠ Команда не получена.")
-            continue
+            return ["/"]  
+        print(f"📂 Диски: {drives}")
+        response = {"action": "list_drives", "data": drives}  
+        ws.send(json.dumps(response)) 
+         
 
-        if choice == '"exit"':
-            print("👋 Выход из программы.")
-            break
-        elif choice == "..":
-            if history:
-                current_path = history.pop()
-            else:
-                print("⚠ Вы уже находитесь на верхнем уровне.")
-        elif choice.isdigit():
-            index = int(choice)
-            if 0 <= index < len(contents):
-                selected_item = contents[index]
-                selected_path = os.path.join(current_path, selected_item)
+    def list_directory(self, ws, path):
+        """Отправляет содержимое директории"""
+        try:
+            contents = os.listdir(path)
+            print(f"\n📂 Текущая папка: {path}")
+            directory_data = []
 
-                if os.path.isdir(selected_path):
-                    history.append(current_path)
-                    current_path = selected_path
+            for index, item in enumerate(contents):
+                item_path = os.path.join(path, item)
+                if os.path.isdir(item_path):
+                    directory_data.append({"index": index, "type": "folder", "name": item})
+                    print(f"  [{index}] 📁 {item}/")
                 else:
-                    print(f"\nОткрыт файл: {selected_item}")
-                    try:
-                        os.startfile(selected_path)
-                    except Exception as e:
-                        print(f"⚠ Не удалось открыть файл: {e}")
+                    directory_data.append({"index": index, "type": "file", "name": item})
+                    print(f"  [{index}] 📄 {item}")
+
+
+            print(f"📂 Содержимое папки {path}: {directory_data}")
+            self.current_path = path
+            response = {"action": "list_directory", "path": path, "data": directory_data}
+            ws.send(json.dumps(response))
+        except PermissionError:
+            print("⛔ Нет доступа к папке.")
+            response = {"action": "error", "message": "Нет доступа к папке"}
+            ws.send(json.dumps(response))
+        except FileNotFoundError:
+            print("❌ Папка не найдена.")
+            response = {"action": "error", "message": "Папка не найдена"}
+            ws.send(json.dumps(response))
+
+    def navigate(self, ws, path):
+        """Навигация по папкам"""
+        if path == "..":
+            if self.history:
+                self.current_path = self.history.pop()
             else:
-                print("⚠ Неверный номер.")
+                print("⚠ Уже находитесь на верхнем уровне.")
+                response = {"action": "error", "message": "Вы уже находитесь на верхнем уровне."}
+                ws.send(json.dumps(response))
+                return
         else:
-            print("⚠ Неизвестная команда.")
+            self.history.append(self.current_path)
+            self.current_path = path
 
+        print(f"📂 Переход в папку: {self.current_path}")
+        self.list_directory(ws, self.current_path)
 
-def get_drives():
-    import platform
-    if platform.system() == "Windows":
-        import string
-        from ctypes import windll
+    def run(self):
+        self.ws.run_forever()
 
-        bitmask = windll.kernel32.GetLogicalDrives()
-        if bitmask == 0:
-            print("⚠ Ошибка: функция GetLogicalDrives() вернула 0.")
-            return []
-
-        drives = []
-        for letter in string.ascii_uppercase:
-            if bitmask & 1:
-                drives.append(f"{letter}:\\")
-            bitmask >>= 1
-
-        print("Диски найдены:", drives)
-        return drives
-    else:
-        return ["/"]
-
-
-async def main():
-    print("📂 Список дисков для сканирования:")
-    drives = get_drives()
-    if not drives:
-        print("⚠ Не удалось получить список дисков.")
-        return
-
-    await send_post_request({"disks": drives}, 'disk')
-
-    for i, drive in enumerate(drives):
-        print(f"[{i}] {drive}")
-
-    start_drive = input("\nВыберите диск для начала (номер): ").strip()
-    if start_drive.isdigit() and 0 <= int(start_drive) < len(drives):
-        await navigate(drives[int(start_drive)])
-    else:
-        print("⚠ Неверный выбор.")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    ws_handler = WebSocketHandler("ws://192.168.0.108:8000/ws/listen/files_pc/123")
+    ws_handler.run()

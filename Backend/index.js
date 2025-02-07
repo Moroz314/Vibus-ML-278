@@ -1,5 +1,14 @@
 import express from 'express';
 import cors from 'cors';
+import ComandModel from './model/comand.js'
+import mongoose from 'mongoose';
+
+
+mongoose
+    .connect('mongodb+srv://vladmorozov2020:Nevskifront208@moroz.gjylj0v.mongodb.net/Vibus_ML_278?retryWrites=true&w=majority&appName=Moroz')
+    .then(() =>{console.log("DB OK")})
+    .catch((err) => {console.log('DB ERR', err)})
+
 
 
 const app = express();
@@ -8,12 +17,12 @@ app.use(express.json());
 app.use(cors());
 
 
-// Маршрут для проверки
+
 app.get("/", (req, res) => {
     res.send("<h2>Vibus-ML-278 Server is running</h2>");
 });
 
-// Обработка POST-запроса для данных о файле
+
 app.post('/file', (req, res) => {
     const fileInfo = req.body;
 
@@ -28,7 +37,6 @@ app.post('/file', (req, res) => {
     res.status(200).json({ message: 'Данные о файле успешно получены.', data: fileInfo });
 });
 
-// Обработка POST-запроса для списка дисков
 app.post('/disk', (req, res) => {
     const disks = req.body;
 
@@ -44,10 +52,55 @@ app.post('/disk', (req, res) => {
     res.status(200).json({ message: 'Данные о дисках успешно получены.', data: disks });
 });
 
-app.get('/zapr', async (req, res) => {
+app.post('/post', async (req, res) => {
+    try{
+  
+     const doc = new ComandModel({
+        comand: req.body.comand
+     });
+
+
+     const coman = await doc.save();
+     
+ 
+     res.json({
+         ...coman._doc
+     })}
+    catch (err){
+        res.status(500).json({
+            message: 'неудалось сополучить команду'
+        });
+        console.log(err)
+   }
+    });
+app.put('/zapr/:id', async (req, res) => {
     try {
-        const post = ""
-    res.json(post)
+        const comId = req.params.id;
+        const commandd = await ComandModel.updateOne(
+            {
+                _id: comId
+            },
+            {
+                comand: req.body.comand,
+            }
+        )
+        res.json({
+            sucses: true
+        })
+    }   
+    catch (err){
+        res.status(500).json({
+            message: 'неудалось сополучить команду'
+        });
+        console.log(err)
+   }
+});
+
+app.get('/zapr/:id', async (req, res) => {
+    try {
+        const postId = req.params.id;
+        const commandd = await ComandModel.findById(postId)
+    res.json(commandd)
     }   
     catch (err){
         res.status(500).json({
@@ -57,7 +110,6 @@ app.get('/zapr', async (req, res) => {
    }
 });
 
-// Обработка POST-запроса для списка директорий
 app.post('/dirs', (req, res) => {
     const dirs = req.body;
 
@@ -73,7 +125,6 @@ app.post('/dirs', (req, res) => {
     res.status(200).json({ message: 'Данные о директориях успешно получены.', data: dirs });
 });
 
-// Обработка 404 для неизвестных маршрутов
 app.use((req, res) => {
     res.status(404).send('Ошибка 404: путь не найден.');
 });
